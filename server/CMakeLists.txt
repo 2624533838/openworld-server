@@ -28,6 +28,8 @@ add_executable(openworld_server
     src/main.cpp
     src/connection.cpp
     src/frame.cpp
+    src/player.cpp
+    src/world.cpp
 )
 
 # 生成 protobuf C++ 代码（构建时自动生成，proto 是唯一真源）

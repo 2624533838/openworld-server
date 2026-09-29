@@ -1,60 +1,21 @@
-// 第 2 周里程碑：协议层 —— protobuf 编解码 + 长度前缀帧（粘包/拆包）。
-// 在 echo 服务器基础上升级：收二进制帧 → 解析 Envelope → 按类型处理 → 回包。
+// MVP：登录（发号）+ 服务器权威移动 + 九宫格 AOI 广播 + 多玩家同屏。
+// 在 echo 服务器基础上升级：收二进制帧 → 解析 Envelope → 交给 World 处理。
 
 #include <asio.hpp>
 
-#include <chrono>
 #include <cstdint>
 #include <iostream>
 #include <memory>
 
 #include "connection.h"
-#include "openworld.pb.h"
+#include "world.h"
 
 using asio::ip::tcp;
-using namespace openworld;
-
-namespace {
-
-// 服务器当前时间（毫秒，自 epoch）
-std::int64_t now_ms() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::system_clock::now().time_since_epoch())
-        .count();
-}
-
-// 消息分发：按 Envelope.type 处理并回包
-void handle_message(Connection& conn, Envelope& env) {
-    Envelope resp;
-    switch (env.type()) {
-        case Envelope::LOGIN_REQ: {
-            auto* ack = resp.mutable_login_ack();
-            ack->set_ok(true);
-            ack->set_player_id("player_1");  // Step 3 再接真实玩家管理
-            ack->mutable_spawn()->set_x(100.0f);
-            ack->mutable_spawn()->set_y(100.0f);
-            resp.set_type(Envelope::LOGIN_ACK);
-            conn.send(resp);
-            break;
-        }
-        case Envelope::HEARTBEAT: {
-            resp.set_type(Envelope::HEARTBEAT);
-            resp.mutable_heartbeat()->set_server_time(now_ms());
-            conn.send(resp);
-            break;
-        }
-        default:
-            // 其他类型（MOVE_REQ 等）留到后续里程碑处理
-            break;
-    }
-}
-
-}  // namespace
 
 class Server {
 public:
-    Server(asio::io_context& io, unsigned short port)
-        : acceptor_(io, tcp::endpoint(tcp::v4(), port)) {
+    Server(asio::io_context& io, unsigned short port, openworld::World& world)
+        : acceptor_(io, tcp::endpoint(tcp::v4(), port)), world_(world) {
         do_accept();
     }
 
@@ -63,14 +24,22 @@ private:
         acceptor_.async_accept(
             [this](std::error_code ec, tcp::socket socket) {
                 if (!ec) {
-                    std::make_shared<Connection>(std::move(socket), handle_message)
-                        ->start();
+                    auto conn = std::make_shared<openworld::Connection>(
+                        std::move(socket),
+                        [this](openworld::Connection& c, openworld::Envelope& e) {
+                            world_.handle(c, e);
+                        },
+                        [this](openworld::Connection* c) {
+                            world_.on_disconnect(c);
+                        });
+                    conn->start();
                 }
                 do_accept();
             });
     }
 
     tcp::acceptor acceptor_;
+    openworld::World& world_;
 };
 
 int main(int argc, char* argv[]) {
@@ -81,7 +50,8 @@ int main(int argc, char* argv[]) {
 
     try {
         asio::io_context io;
-        Server server(io, port);
+        openworld::World world(io);
+        Server server(io, port, world);
         std::cout << "openworld server listening on 127.0.0.1:" << port << "\n";
         io.run();
     } catch (const std::exception& e) {

@@ -4,14 +4,16 @@
 
 namespace openworld {
 
-Connection::Connection(tcp::socket socket, MessageHandler handler)
-    : socket_(std::move(socket)), handler_(std::move(handler)) {}
+Connection::Connection(tcp::socket socket, MessageHandler handler, CloseHandler on_close)
+    : socket_(std::move(socket)),
+      handler_(std::move(handler)),
+      on_close_(std::move(on_close)) {}
 
 void Connection::start() {
     do_read();
 }
 
-void Connection::send(Envelope& env) {
+void Connection::send(const Envelope& env) {
     std::string payload;
     if (!env.SerializeToString(&payload)) {
         std::cerr << "Connection::send: SerializeToString failed\n";
@@ -29,6 +31,7 @@ void Connection::do_read() {
     socket_.async_read_some(asio::buffer(data_, sizeof(data_)),
         [this, self](std::error_code ec, std::size_t length) {
             if (ec) {
+                if (on_close_) on_close_(this);
                 return;  // 对方关闭或出错，结束本连接
             }
             try {
@@ -42,6 +45,7 @@ void Connection::do_read() {
                 }
             } catch (const std::exception& e) {
                 std::cerr << "Connection: protocol error: " << e.what() << "\n";
+                if (on_close_) on_close_(this);
                 return;  // 协议错误，断开连接
             }
             do_read();
@@ -53,6 +57,7 @@ void Connection::do_write() {
     asio::async_write(socket_, asio::buffer(write_queue_.front()),
         [this, self](std::error_code ec, std::size_t) {
             if (ec) {
+                if (on_close_) on_close_(this);
                 return;
             }
             write_queue_.pop_front();
