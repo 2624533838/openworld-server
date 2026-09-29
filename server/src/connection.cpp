@@ -31,6 +31,7 @@ void Connection::do_read() {
     socket_.async_read_some(asio::buffer(data_, sizeof(data_)),
         [this, self](std::error_code ec, std::size_t length) {
             if (ec) {
+                std::cerr << "connection closed (read): " << ec.message() << "\n";
                 if (on_close_) on_close_(this);
                 return;  // 对方关闭或出错，结束本连接
             }
@@ -57,6 +58,7 @@ void Connection::do_write() {
     asio::async_write(socket_, asio::buffer(write_queue_.front()),
         [this, self](std::error_code ec, std::size_t) {
             if (ec) {
+                std::cerr << "connection closed (write): " << ec.message() << "\n";
                 if (on_close_) on_close_(this);
                 return;
             }

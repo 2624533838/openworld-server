@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
         asio::io_context io;
         openworld::World world(io);
         Server server(io, port, world);
-        std::cout << "openworld server listening on 127.0.0.1:" << port << "\n";
+        std::cout << "openworld server listening on 127.0.0.1:" << port << std::endl;
         io.run();
     } catch (const std::exception& e) {
         std::cerr << "Exception: " << e.what() << "\n";
