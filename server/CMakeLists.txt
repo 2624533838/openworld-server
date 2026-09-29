@@ -23,6 +23,19 @@ find_package(protobuf CONFIG REQUIRED
     PATHS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/protobuf"
     NO_DEFAULT_PATH)
 
+# 生成 protobuf C++ 代码（构建时自动生成，proto 是唯一真源）
+set(PROTO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../proto")
+protobuf_generate(
+    LANGUAGE cpp
+    IMPORT_DIRS "${PROTO_DIR}"
+    PROTOS "${PROTO_DIR}/openworld.proto"
+    OUT_VAR PROTO_GENERATED
+)
+# 生成的 pb 提成静态库，服务器与单测共用（避免重复生成/编译）
+add_library(openworld_proto STATIC ${PROTO_GENERATED})
+target_link_libraries(openworld_proto PUBLIC protobuf::libprotobuf)
+target_include_directories(openworld_proto PUBLIC "${CMAKE_CURRENT_BINARY_DIR}")
+
 # ---- 服务器可执行 ----
 add_executable(openworld_server
     src/main.cpp
@@ -34,21 +47,12 @@ add_executable(openworld_server
     src/persistence.cpp
 )
 
-# 生成 protobuf C++ 代码（构建时自动生成，proto 是唯一真源）
-set(PROTO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../proto")
-protobuf_generate(
-    LANGUAGE cpp
-    TARGET openworld_server
-    IMPORT_DIRS "${PROTO_DIR}"
-    PROTOS "${PROTO_DIR}/openworld.proto"
-)
-
 target_link_libraries(openworld_server PRIVATE
     asio
-    protobuf::libprotobuf
+    openworld_proto
 )
 
-# 生成的 openworld.pb.h 在构建目录，需要加进 include 路径
+# 生成的 openworld.pb.h 在构建目录（openworld_proto 已 PUBLIC 引入，这里保留显式声明兜底）
 target_include_directories(openworld_server PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
 # Windows 需要 Winsock，并指定 Windows API 版本（消掉 _WIN32_WINNT 警告）
@@ -71,3 +75,35 @@ if(EXISTS "${MYSQL_DIR}/include/mysql.h")
 else()
     message(WARNING "未找到 ${MYSQL_DIR}/include/mysql.h，持久化编译将失败")
 endif()
+
+# ---- 单元测试（GoogleTest，vendor 源码见 third_party/googletest）----
+enable_testing()
+# 只编 gtest/gtest_main（不编 gmock）；GOOGLETEST_VERSION 等变量由顶层 CMakeLists 提供，
+# 因此必须 add_subdirectory 顶层目录而非 googletest 子目录。
+set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/googletest)
+
+add_executable(openworld_tests
+    tests/unit/test_frame.cpp
+    tests/unit/test_grid.cpp
+    tests/unit/test_player.cpp
+    src/frame.cpp
+    src/player.cpp
+    src/connection.cpp
+)
+
+target_link_libraries(openworld_tests PRIVATE
+    gtest_main
+    asio
+    openworld_proto
+)
+
+target_include_directories(openworld_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+
+if(WIN32)
+    target_link_libraries(openworld_tests PRIVATE ws2_32 mswsock)
+    target_compile_definitions(openworld_tests PRIVATE _WIN32_WINNT=0x0601)
+endif()
+
+add_test(NAME openworld_tests COMMAND openworld_tests)

@@ -29,6 +29,9 @@ _deps/
 server/third_party/protobuf-src/
 server/third_party/protobuf/
 
+# ---- GoogleTest 构建依赖（源码，不进 git）----
+server/third_party/googletest/
+
 # ---- IDE ----
 .vscode/
 .idea/
