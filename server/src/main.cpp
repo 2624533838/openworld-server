@@ -1,48 +1,56 @@
-// 第 1 周里程碑：Asio echo 服务器
-// 目标：验证工具链 + 跑通「TCP 连接 → 收数据 → 原样返回」的最小闭环。
-// 后续 Reactor、粘包/拆包、protobuf 都在这之上迭代。
+// 第 2 周里程碑：协议层 —— protobuf 编解码 + 长度前缀帧（粘包/拆包）。
+// 在 echo 服务器基础上升级：收二进制帧 → 解析 Envelope → 按类型处理 → 回包。
 
 #include <asio.hpp>
 
+#include <chrono>
+#include <cstdint>
 #include <iostream>
 #include <memory>
 
+#include "connection.h"
+#include "openworld.pb.h"
+
 using asio::ip::tcp;
+using namespace openworld;
 
-// 一条连接对应一个 Session：负责收、回写
-class Session : public std::enable_shared_from_this<Session> {
-public:
-    explicit Session(tcp::socket socket) : socket_(std::move(socket)) {}
+namespace {
 
-    void start() { do_read(); }
+// 服务器当前时间（毫秒，自 epoch）
+std::int64_t now_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
 
-private:
-    void do_read() {
-        auto self(shared_from_this());
-        socket_.async_read_some(asio::buffer(data_),
-            [this, self](std::error_code ec, std::size_t length) {
-                if (ec) {
-                    return;  // 对方关闭或出错，直接结束本连接
-                }
-                do_write(length);
-            });
+// 消息分发：按 Envelope.type 处理并回包
+void handle_message(Connection& conn, Envelope& env) {
+    Envelope resp;
+    switch (env.type()) {
+        case Envelope::LOGIN_REQ: {
+            auto* ack = resp.mutable_login_ack();
+            ack->set_ok(true);
+            ack->set_player_id("player_1");  // Step 3 再接真实玩家管理
+            ack->mutable_spawn()->set_x(100.0f);
+            ack->mutable_spawn()->set_y(100.0f);
+            resp.set_type(Envelope::LOGIN_ACK);
+            conn.send(resp);
+            break;
+        }
+        case Envelope::HEARTBEAT: {
+            resp.set_type(Envelope::HEARTBEAT);
+            resp.mutable_heartbeat()->set_server_time(now_ms());
+            conn.send(resp);
+            break;
+        }
+        default:
+            // 其他类型（MOVE_REQ 等）留到后续里程碑处理
+            break;
     }
+}
 
-    void do_write(std::size_t length) {
-        auto self(shared_from_this());
-        asio::async_write(socket_, asio::buffer(data_, length),
-            [this, self](std::error_code ec, std::size_t /*length*/) {
-                if (!ec) {
-                    do_read();
-                }
-            });
-    }
+}  // namespace
 
-    tcp::socket socket_;
-    char data_[1024];
-};
-
-// 服务器：接受连接，每个连接交给一个 Session
 class Server {
 public:
     Server(asio::io_context& io, unsigned short port)
@@ -55,7 +63,8 @@ private:
         acceptor_.async_accept(
             [this](std::error_code ec, tcp::socket socket) {
                 if (!ec) {
-                    std::make_shared<Session>(std::move(socket))->start();
+                    std::make_shared<Connection>(std::move(socket), handle_message)
+                        ->start();
                 }
                 do_accept();
             });
@@ -73,7 +82,7 @@ int main(int argc, char* argv[]) {
     try {
         asio::io_context io;
         Server server(io, port);
-        std::cout << "Echo server listening on 127.0.0.1:" << port << "\n";
+        std::cout << "openworld server listening on 127.0.0.1:" << port << "\n";
         io.run();
     } catch (const std::exception& e) {
         std::cerr << "Exception: " << e.what() << "\n";

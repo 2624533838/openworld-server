@@ -26,9 +26,10 @@ openworld-server/
 
 - [x] 仓库初始化
 - [x] 协议草案 + 消息时序表（docs/protocol.md）
-- [x] Asio echo 服务器代码（待装工具链后编译）
-- [ ] Reactor + 粘包/拆包
-- [ ] protobuf 编解码
+- [x] Asio echo 服务器（编译通过）
+- [x] protobuf 编解码 + 粘包/拆包（长度前缀帧）
+- [x] 登录/心跳协议联调（假客户端测试）
+- [ ] Reactor 模型精化
 - [ ] 分块地图 + AOI
 - [ ] 状态同步 + 持久化
 - [ ] 网关 + 逻辑服
@@ -36,15 +37,15 @@ openworld-server/
 
 文档：[docs/prd.md](docs/prd.md)（产品设计） · [docs/spec.md](docs/spec.md)（技术规格） · [docs/protocol.md](docs/protocol.md)（协议）。
 
-## 构建（第 1 周里程碑）
+## 构建
 
-前置：安装 Visual Studio 2022 Community 的「使用 C++ 的桌面开发」工作负载（自带 MSVC + CMake）。
+前置：安装 Visual Studio 2026 Community 的「使用 C++ 的桌面开发」工作负载（自带 MSVC + CMake）。
 
 ```bash
 cd server
 cmake -S . -B build
 cmake --build build --config Release
-./build/Release/echo_server.exe 9000
+./build/Release/openworld_server.exe 9000
 ```
 
 （Windows 上也可直接双击 [server/build.bat](server/build.bat) 完成前两步。）
