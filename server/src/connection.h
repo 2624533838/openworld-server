@@ -31,6 +31,10 @@ public:
     // 发送一个 Envelope（自动加长度前缀）
     void send(const Envelope& env);
 
+    // 主动关闭连接（如心跳超时踢线）。关闭会取消未完成的异步读写，
+    // 其完成回调以 operation_aborted 触发 on_close_，由上层做清理。
+    void close();
+
 private:
     void do_read();
     void do_write();

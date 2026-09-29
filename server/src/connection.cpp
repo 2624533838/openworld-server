@@ -26,6 +26,11 @@ void Connection::send(const Envelope& env) {
     }
 }
 
+void Connection::close() {
+    asio::error_code ec;
+    socket_.close(ec);  // 忽略错误；重复关闭是无害的 no-op
+}
+
 void Connection::do_read() {
     auto self(shared_from_this());
     socket_.async_read_some(asio::buffer(data_, sizeof(data_)),

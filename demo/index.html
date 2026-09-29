@@ -193,6 +193,7 @@ const input = { left: false, right: false, up: false, down: false, shift: false 
 let decorations = [];         // 静态装饰物（树/石头），提供空间参照
 let showAoi = true;
 let ws = null;
+let reconnectTimer = null;
 let lastIntent = '';
 let bcTick = 0;               // MoveBroadcast 日志节流计数
 let lastHb = 0;
@@ -273,6 +274,11 @@ $('username').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogi
 function doLogin() {
   self.name = $('username').value.trim() || 'yuzheng';
   logBody.innerHTML = '';
+  connect();
+}
+
+// 建立 WebSocket 并登录。断线后由 onclose 自动重连（同名重登，服务器恢复位置）。
+function connect() {
   log('to', `→ LoginReq{ username:"${self.name}", token:"" }`);
 
   ws = new WebSocket('ws://' + location.host + '/ws');
@@ -281,7 +287,15 @@ function doLogin() {
     ws.send(encEnvelope(T.LOGIN_REQ, 2, encLoginReq(self.name)));
   };
   ws.onmessage = (e) => onEnvelope(new Uint8Array(e.data));
-  ws.onclose = () => { log('sys', '[连接] 与服务器断开'); };
+  ws.onclose = () => {
+    log('sys', '[连接] 与服务器断开，2 秒后自动重连…');
+    // 清掉视野与意图状态：重连后服务器会重新下发入场同步
+    others.clear();
+    lastIntent = '';
+    lastHb = 0;
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(connect, 2000);
+  };
   ws.onerror = () => {};
 }
 

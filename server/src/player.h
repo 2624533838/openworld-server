@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -35,6 +36,14 @@ public:
     void mark_dirty() { dirty_ = true; }
     void clear_dirty() { dirty_ = false; }
 
+    // 心跳/活动时间：任何已登录消息到达时刷新（有流量即存活），
+    // tick 里据此判定是否超时踢线。
+    void touch(std::int64_t now_ms) { last_active_ms_ = now_ms; }
+    std::int64_t last_active_ms() const { return last_active_ms_; }
+
+    // 连接访问器（用于服务器主动断开，如心跳超时踢线）
+    std::shared_ptr<Connection> conn() const { return conn_; }
+
     // 便捷发送
     void send(Envelope& env) { conn_->send(env); }
 
@@ -46,6 +55,7 @@ private:
     float vx_ = 0.0f, vy_ = 0.0f;
     bool dirty_ = false;
     int cell_x_ = 0, cell_y_ = 0;
+    std::int64_t last_active_ms_ = 0;
     std::shared_ptr<Connection> conn_;
 };
 

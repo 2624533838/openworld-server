@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "connection.h"
+#include "grid.h"
 #include "persistence.h"
 #include "player.h"
 
@@ -26,10 +27,13 @@ inline constexpr float kCellSize = 20.0f;     // 分块格子边长
 inline constexpr float kMaxSpeed = 20.0f;     // 移动速度上限（防作弊）
 inline constexpr float kWorldSize = 2000.0f;  // 世界边长（正方形）
 inline constexpr std::int64_t kTickMs = 33;   // tick 间隔（~30Hz）
+// 心跳超时：超过此时长没收到该连接任何消息则踢线（≈6 个 5s 心跳周期，宽松避免误踢）
+inline constexpr std::int64_t kHeartbeatTimeoutMs = 30000;
 
 class World {
 public:
-    World(asio::io_context& io, PersistenceService& persistence);
+    World(asio::io_context& io, PersistenceService& persistence,
+          std::int64_t heartbeat_timeout_ms = kHeartbeatTimeoutMs);
 
     // 消息入口（由 Connection 的 handler 调用）
     void handle(Connection& conn, Envelope& env);
@@ -47,10 +51,7 @@ private:
     void start_tick();
     void tick();
 
-    // ---- 九宫格网格 ----
-    static std::int64_t cell_key(int cx, int cy);
-    void grid_add(Player* p);
-    void grid_remove(Player* p);
+    // ---- 九宫格网格（纯逻辑在 Grid，见 grid.h）----
     // 遍历 p 九宫格内的其他玩家（不含 p 自身）
     template <typename F>
     void for_each_in_aoi(const Player& p, F&& fn) const;
@@ -67,27 +68,22 @@ private:
     asio::io_context& io_;
     asio::steady_timer tick_;
     PersistenceService& persistence_;
+    std::int64_t heartbeat_timeout_ms_;
     std::unordered_map<std::string, std::shared_ptr<Player>> players_;
     std::unordered_map<Connection*, std::shared_ptr<Player>> by_conn_;
     std::unordered_map<std::string, Player*> by_name_;           // 在线用户名 → 玩家
     std::unordered_set<std::string> pending_names_;              // 登录中占用的用户名
     std::unordered_map<Connection*, std::string> pending_login_; // 登录中的连接 → 用户名
-    std::unordered_map<std::int64_t, std::vector<Player*>> grid_;
+    Grid<Player> grid_;                                          // 九宫格（见 grid.h）
     int next_id_ = 1;
     std::int64_t next_save_ms_ = 0;                              // 下次定时落盘时间
 };
 
 template <typename F>
 void World::for_each_in_aoi(const Player& p, F&& fn) const {
-    for (int cx = p.cell_x() - 1; cx <= p.cell_x() + 1; ++cx) {
-        for (int cy = p.cell_y() - 1; cy <= p.cell_y() + 1; ++cy) {
-            auto it = grid_.find(cell_key(cx, cy));
-            if (it == grid_.end()) continue;
-            for (Player* q : it->second) {
-                if (q != &p) fn(q);
-            }
-        }
-    }
+    grid_.for_each_in_aoi(p.cell_x(), p.cell_y(), [&](Player* q) {
+        if (q != &p) fn(q);
+    });
 }
 
 }  // namespace openworld

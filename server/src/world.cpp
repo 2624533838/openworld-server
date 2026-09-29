@@ -17,8 +17,10 @@ std::int64_t now_ms() {
 
 }  // namespace
 
-World::World(asio::io_context& io, PersistenceService& persistence)
-    : io_(io), tick_(io), persistence_(persistence) {
+World::World(asio::io_context& io, PersistenceService& persistence,
+             std::int64_t heartbeat_timeout_ms)
+    : io_(io), tick_(io), persistence_(persistence),
+      heartbeat_timeout_ms_(heartbeat_timeout_ms) {
     next_save_ms_ = now_ms() + 10000;
     start_tick();
 }
@@ -33,6 +35,10 @@ void World::start_tick() {
 }
 
 void World::handle(Connection& conn, Envelope& env) {
+    // 任何已登录连接的消息都刷新活动时间（有流量即存活），供心跳超时判定
+    if (auto it = by_conn_.find(&conn); it != by_conn_.end()) {
+        it->second->touch(now_ms());
+    }
     switch (env.type()) {
         case Envelope::LOGIN_REQ:
             on_login(conn, env.login_req());
@@ -93,7 +99,8 @@ void World::complete_login(Connection& conn, std::optional<std::pair<float, floa
     players_[id] = player;
     by_conn_[&conn] = player;
     by_name_[name] = player.get();
-    grid_add(player.get());
+    grid_.add(player.get(), player->cell_x(), player->cell_y());
+    player->touch(now_ms());  // 出生即合法活动时间戳
 
     send_login_ack(*player);
 
@@ -155,7 +162,7 @@ void World::on_disconnect(Connection* conn) {
     by_conn_.erase(it);
     players_.erase(player->id());
     by_name_.erase(player->name());
-    grid_remove(player.get());
+    grid_.remove(player.get(), player->cell_x(), player->cell_y());
 
     // 最终位置落盘（离线存档，移除热缓存）
     persistence_.save_offline(player->name(), player->x(), player->y());
@@ -183,9 +190,9 @@ void World::tick() {
         const int new_cx = static_cast<int>(p->x() / kCellSize);
         const int new_cy = static_cast<int>(p->y() / kCellSize);
         if (new_cx != old_cx || new_cy != old_cy) {
-            grid_remove(p.get());
+            grid_.remove(p.get(), old_cx, old_cy);
             p->set_cell(new_cx, new_cy);
-            grid_add(p.get());
+            grid_.add(p.get(), new_cx, new_cy);
             on_cell_changed(*p, old_cx, old_cy);
         }
     }
@@ -213,66 +220,41 @@ void World::tick() {
             persistence_.save_online(p->name(), p->x(), p->y());
         }
     }
-}
 
-std::int64_t World::cell_key(int cx, int cy) {
-    return (static_cast<std::int64_t>(cx) << 32) | static_cast<std::uint32_t>(cy);
-}
-
-void World::grid_add(Player* p) {
-    grid_[cell_key(p->cell_x(), p->cell_y())].push_back(p);
-}
-
-void World::grid_remove(Player* p) {
-    auto it = grid_.find(cell_key(p->cell_x(), p->cell_y()));
-    if (it == grid_.end()) return;
-    auto& v = it->second;
-    v.erase(std::remove(v.begin(), v.end(), p), v.end());
-    if (v.empty()) grid_.erase(it);
+    // 4) 心跳超时：踢掉长时间无活动的连接。close 只关闭 socket、取消未完成读写，
+    //    其 on_close 回调随后投递执行 on_disconnect，故本循环内不会重入修改 players_。
+    for (auto& [id, p] : players_) {
+        if (now - p->last_active_ms() > heartbeat_timeout_ms_) {
+            if (auto c = p->conn()) c->close();
+        }
+    }
 }
 
 void World::broadcast_to_aoi(const Player& p, Envelope& env) {
-    for (int cx = p.cell_x() - 1; cx <= p.cell_x() + 1; ++cx) {
-        for (int cy = p.cell_y() - 1; cy <= p.cell_y() + 1; ++cy) {
-            auto it = grid_.find(cell_key(cx, cy));
-            if (it == grid_.end()) continue;
-            for (Player* q : it->second) {
-                q->send(env);
-            }
-        }
-    }
+    grid_.for_each_in_aoi(p.cell_x(), p.cell_y(), [&](Player* q) {
+        q->send(env);
+    });
 }
 
 void World::on_cell_changed(Player& p, int old_cx, int old_cy) {
-    const int cx = p.cell_x();
-    const int cy = p.cell_y();
+    const auto [enter, leave] = aoi_diff(old_cx, old_cy, p.cell_x(), p.cell_y());
 
     // 进入：新九宫格有、旧九宫格没有的格子里的玩家
-    for (int gx = cx - 1; gx <= cx + 1; ++gx) {
-        for (int gy = cy - 1; gy <= cy + 1; ++gy) {
-            if (std::abs(gx - old_cx) <= 1 && std::abs(gy - old_cy) <= 1) continue;
-            auto it = grid_.find(cell_key(gx, gy));
-            if (it == grid_.end()) continue;
-            for (Player* q : it->second) {
-                if (q == &p) continue;
-                send_enter_to(*q, p);   // Q 看到 P 进入
-                send_enter_to(p, *q);   // P 看到 Q
-            }
-        }
+    for (auto [gx, gy] : enter) {
+        grid_.for_each_cell(gx, gy, [&](Player* q) {
+            if (q == &p) return;
+            send_enter_to(*q, p);   // Q 看到 P 进入
+            send_enter_to(p, *q);   // P 看到 Q
+        });
     }
 
     // 离开：旧九宫格有、新九宫格没有的格子里的玩家
-    for (int gx = old_cx - 1; gx <= old_cx + 1; ++gx) {
-        for (int gy = old_cy - 1; gy <= old_cy + 1; ++gy) {
-            if (std::abs(gx - cx) <= 1 && std::abs(gy - cy) <= 1) continue;
-            auto it = grid_.find(cell_key(gx, gy));
-            if (it == grid_.end()) continue;
-            for (Player* q : it->second) {
-                if (q == &p) continue;
-                send_leave_to(*q, p);   // Q 看到 P 离开
-                send_leave_to(p, *q);   // P 看到 Q 离开
-            }
-        }
+    for (auto [gx, gy] : leave) {
+        grid_.for_each_cell(gx, gy, [&](Player* q) {
+            if (q == &p) return;
+            send_leave_to(*q, p);   // Q 看到 P 离开
+            send_leave_to(p, *q);   // P 看到 Q 离开
+        });
     }
 }
 

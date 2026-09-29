@@ -48,10 +48,13 @@ private:
 int main(int argc, char* argv[]) {
     unsigned short port = 9000;
     bool no_db = false;
+    std::int64_t heartbeat_timeout_ms = openworld::kHeartbeatTimeoutMs;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--no-db") {
             no_db = true;
+        } else if (arg == "--heartbeat-timeout-ms") {
+            if (i + 1 < argc) heartbeat_timeout_ms = std::stoll(argv[++i]);
         } else {
             port = static_cast<unsigned short>(std::stoi(arg));
         }
@@ -63,7 +66,7 @@ int main(int argc, char* argv[]) {
         openworld::PersistenceService persistence(io, db_cfg, !no_db);
         persistence.start();
 
-        openworld::World world(io, persistence);
+        openworld::World world(io, persistence, heartbeat_timeout_ms);
         Server server(io, port, world);
         std::cout << "openworld server listening on 127.0.0.1:" << port
                   << (no_db ? " (仅内存，无持久化)" : "") << std::endl;
