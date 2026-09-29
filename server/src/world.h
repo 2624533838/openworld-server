@@ -1,5 +1,5 @@
 // World：单线程游戏世界。持有所有玩家 + 九宫格网格 + 30Hz tick。
-// 消息处理、服务器权威移动、AOI 进入/离开广播、断开清理都在这里。
+// 消息处理、移动、AOI 进入/离开广播、断开清理都在这里。
 // 全部逻辑跑在同一个 io_context 线程上，无需加锁。
 
 #pragma once
@@ -52,7 +52,7 @@ private:
     void send_login_ack(Player& p);
     void send_enter_to(Player& viewer, Player& subject);
     void send_leave_to(Player& viewer, Player& subject);
-    // 广播 env 给 p 九宫格内的所有玩家（含 p 自身，作为权威位置回传）
+    // 广播 env 给 p 九宫格内的所有玩家（含 p 自身，作为位置回传）
     void broadcast_to_aoi(const Player& p, Envelope& env);
     // 跨格子时的进入/离开（在 grid 更新之后调用）
     void on_cell_changed(Player& p, int old_cx, int old_cy);

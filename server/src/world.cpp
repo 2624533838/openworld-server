@@ -82,7 +82,7 @@ void World::on_move(Connection& conn, const MoveReq& req) {
     if (it == by_conn_.end()) return;  // 未登录，忽略
 
     Player& p = *it->second;
-    // 服务器权威：归一化方向 + 限速；客户端坐标一概不信
+    // 归一化方向 + 限速；客户端坐标一概不信
     float dx = req.dir().x();
     float dy = req.dir().y();
     const float len = std::sqrt(dx * dx + dy * dy);
@@ -143,7 +143,7 @@ void World::tick() {
         }
     }
 
-    // 2) 广播 dirty 玩家的权威位置到其九宫格（含自身，作为位置回传）
+    // 2) 广播 dirty 玩家的位置到其九宫格（含自身，作为位置回传）
     for (auto& [id, p] : players_) {
         if (!p->dirty()) continue;
         Envelope env;

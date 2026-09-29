@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 集成测试：验证协议层 + MVP 玩法（登录/移动/权威限速/多玩家/九宫格 AOI/断线）。
+# 集成测试：验证协议层 + MVP 玩法（登录/移动/限速/多玩家/九宫格 AOI/断线）。
 # 自带极简 protobuf 编解码，零第三方依赖，直接运行：
 #   python tests/test_protocol.py
 
@@ -26,7 +26,7 @@ T_HEARTBEAT = 5
 T_PLAYER_ENTER = 6
 T_PLAYER_LEAVE = 7
 
-# 服务器权威常量（与 world.h 保持一致）
+# 服务器常量（与 world.h 保持一致）
 MAX_SPEED = 20.0
 
 
@@ -298,7 +298,7 @@ def test_speed_clamp():
     _, _, vel = decode_move_broadcast(p)
     assert abs(vel[0] - MAX_SPEED) < 1e-3, f'速度应截断为 {MAX_SPEED}，实际 {vel[0]}'
     sock.close()
-    print(f'  [pass] 权威限速：speed=999 → 服务器截断为 {MAX_SPEED}')
+    print(f'  [pass] 限速：speed=999 → 服务器截断为 {MAX_SPEED}')
 
 
 def test_two_players():

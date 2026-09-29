@@ -1,4 +1,4 @@
-// MVP：登录（发号）+ 服务器权威移动 + 九宫格 AOI 广播 + 多玩家同屏。
+// MVP：登录（发号）+ 移动 + 九宫格 AOI 广播 + 多玩家同屏。
 // 在 echo 服务器基础上升级：收二进制帧 → 解析 Envelope → 交给 World 处理。
 
 #include <asio.hpp>

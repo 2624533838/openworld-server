@@ -1,4 +1,4 @@
-// Player 实体：一条会话 = 连接 + 游戏状态（服务器权威位置/速度）。
+// Player 实体：一条会话 = 连接 + 游戏状态（位置/速度）。
 // 只承载数据与发送；移动/AOI/广播逻辑在 World。
 
 #pragma once
@@ -27,7 +27,7 @@ public:
     int cell_x() const { return cell_x_; }
     int cell_y() const { return cell_y_; }
 
-    // 服务器权威设置速度（方向已归一化、速度已限速）
+    // 设置速度（方向已归一化、速度已限速）
     void set_velocity(float vx, float vy);
     // tick 积分：pos += vel*dt，并 clamp 到 [0, max]
     void integrate(float dt, float max_x, float max_y);
@@ -41,7 +41,7 @@ public:
 private:
     std::string id_;
     std::string name_;
-    float x_, y_;       // 当前权威位置
+    float x_, y_;       // 当前位置
     float spawn_x_, spawn_y_;
     float vx_ = 0.0f, vy_ = 0.0f;
     bool dirty_ = false;
