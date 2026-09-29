@@ -129,6 +129,14 @@ def main():
         assert mid == aid, f'MoveBroadcast id={mid}，期望 {aid}'
         print('  [pass] 桥接移动：A 移动 → B 收到 MoveBroadcast')
 
+        # 回归：空闲存活。A 停下后服务器安静，B 静止 >6s 不应被桥接的 5s 超时误断。
+        ws_send(a, tp.encode_move_req(0.0, 0.0, 0.0, 2))
+        time.sleep(6.5)
+        ws_send(b, tp.encode_heartbeat(12345))
+        hb = ws_recv_until_type(b, tp.T_HEARTBEAT, timeout=2)
+        assert hb is not None, '空闲 6.5s 后 B 应仍在线（心跳有回包）'
+        print('  [pass] 桥接空闲存活：静止 >6s 连接不断')
+
         a.close(); b.close()
         print('\n桥接端到端测试通过')
         return 0

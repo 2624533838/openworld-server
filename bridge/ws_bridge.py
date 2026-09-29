@@ -145,6 +145,9 @@ class BridgeHandler(socketserver.BaseRequestHandler):
     # ---- 游戏服务器 TCP（长度前缀帧）----
     def _game_connect(self):
         self.game = socket.create_connection((GAME_HOST, GAME_PORT), timeout=5)
+        # 连上后去掉超时：静止玩家只有 5s 一次的心跳回包，若保留 5s 超时，
+        # recv 会在下一包到达前先超时，误判游戏服无响应而断开浏览器连接。
+        self.game.settimeout(None)
         threading.Thread(target=self._game_reader, daemon=True).start()
 
     def _game_reader(self):
