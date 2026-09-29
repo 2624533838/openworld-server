@@ -22,9 +22,19 @@ message Envelope {
         MOVE_REQ = 3;
         MOVE_BROADCAST = 4;
         HEARTBEAT = 5;
+        PLAYER_ENTER = 6;
+        PLAYER_LEAVE = 7;
     }
     Type type = 1;
-    oneof body { ... }
+    oneof body {
+        LoginReq login_req = 2;
+        LoginAck login_ack = 3;
+        MoveReq move_req = 4;
+        MoveBroadcast move_broadcast = 5;
+        Heartbeat heartbeat = 6;
+        PlayerEnter player_enter = 7;
+        PlayerLeave player_leave = 8;
+    }
 }
 ```
 
@@ -37,6 +47,8 @@ message Envelope {
 | `MoveReq` | 客户端 → 服务器 | 按方向键时 | 服务器校验、计算新位置，广播 `MoveBroadcast` 给附近玩家 |
 | `MoveBroadcast` | 服务器 → 附近玩家 | 有人移动后 | ——（客户端只接收渲染） |
 | `Heartbeat` | 双向 | 定时 | 更新在线状态；超时判定掉线 |
+| `PlayerEnter` | 服务器 → 附近玩家 | 有人进入你的九宫格 | 广播其 `player_id` + 位置，客户端据此创建/显示该玩家 |
+| `PlayerLeave` | 服务器 → 附近玩家 | 有人离开你的九宫格 | 广播其 `player_id`，客户端据此移除该玩家 |
 
 ## 服务器权威原则（防作弊）
 

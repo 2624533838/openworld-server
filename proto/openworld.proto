@@ -42,6 +42,17 @@ message Heartbeat {
     int64 server_time = 2;
 }
 
+// 玩家进入视野（服务器 → 附近玩家）：有玩家出现在你的九宫格内
+message PlayerEnter {
+    string player_id = 1;
+    Vec2 pos = 2;
+}
+
+// 玩家离开视野（服务器 → 附近玩家）
+message PlayerLeave {
+    string player_id = 1;
+}
+
 // 统一信封：所有消息都包在这里
 message Envelope {
     enum Type {
@@ -51,6 +62,8 @@ message Envelope {
         MOVE_REQ = 3;
         MOVE_BROADCAST = 4;
         HEARTBEAT = 5;
+        PLAYER_ENTER = 6;
+        PLAYER_LEAVE = 7;
     }
 
     Type type = 1;
@@ -61,5 +74,7 @@ message Envelope {
         MoveReq move_req = 4;
         MoveBroadcast move_broadcast = 5;
         Heartbeat heartbeat = 6;
+        PlayerEnter player_enter = 7;
+        PlayerLeave player_leave = 8;
     }
 }
