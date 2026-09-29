@@ -35,6 +35,10 @@ server/third_party/protobuf/
 *.user
 *.suo
 
+# ---- Python ----
+__pycache__/
+*.pyc
+
 # ---- Java ----
 target/
 *.class

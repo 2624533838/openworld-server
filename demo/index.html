@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenWorld · 2D 开放世界 RPG 客户端</title>
+<style>
+  :root {
+    --bg: #0f1420;
+    --panel: rgba(17, 24, 39, 0.88);
+    --border: #2a3550;
+    --text: #e6e9f0;
+    --muted: #8b95a8;
+    --accent: #4f8cff;
+    --green: #51cf66;
+    --red: #ff6b6b;
+    --amber: #ffd43b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  /* ============ 登录界面 ============ */
+  #login-screen {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(1200px 700px at 50% 20%, #1a2438, #0f1420 70%);
+  }
+  .login-card {
+    width: 380px; padding: 36px 32px 28px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .login-card h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: 0.5px; }
+  .login-card .sub { margin: 0 0 24px; color: var(--muted); font-size: 13px; }
+  .login-card label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .login-card input {
+    width: 100%; padding: 10px 12px; margin-bottom: 16px;
+    background: #0a0f18; border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-size: 15px; outline: none;
+  }
+  .login-card input:focus { border-color: var(--accent); }
+  .login-card button {
+    width: 100%; padding: 11px; border: 0; border-radius: 8px;
+    background: var(--accent); color: #fff; font-size: 15px; font-weight: 600;
+    cursor: pointer; transition: filter .15s;
+  }
+  .login-card button:hover { filter: brightness(1.1); }
+  .login-card .hint { margin-top: 16px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+  /* ============ 游戏界面 ============ */
+  #game-screen { position: fixed; inset: 0; display: none; }
+  #world { position: absolute; inset: 0; display: block; }
+
+  .hud {
+    position: absolute; padding: 12px 14px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    font-size: 12px; line-height: 1.7; pointer-events: none; backdrop-filter: blur(4px);
+  }
+  #hud-info { left: 14px; top: 14px; min-width: 210px; }
+  #hud-stats { right: 14px; top: 14px; min-width: 150px; text-align: right; }
+  #hud-help { left: 14px; bottom: 14px; color: var(--muted); }
+  .hud .k { color: var(--muted); }
+  .hud .v { color: var(--text); font-weight: 600; }
+  .hud .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-right: 6px; }
+  .hud h3 { margin: 0 0 4px; font-size: 12px; color: var(--muted); font-weight: 600; }
+
+  /* 消息日志面板 */
+  #log-panel {
+    position: absolute; right: 14px; top: 14px; width: 360px; max-height: 62%;
+    display: flex; flex-direction: column;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    overflow: hidden; backdrop-filter: blur(4px);
+  }
+  #log-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    font-size: 12px; color: var(--muted); font-weight: 600; flex-shrink: 0;
+  }
+  #log-head button {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer;
+  }
+  #log-head button:hover { color: var(--text); border-color: var(--accent); }
+  #log-body {
+    overflow-y: auto; padding: 8px 10px; flex: 1;
+    font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+    font-size: 11.5px; line-height: 1.75;
+  }
+  #log-body .line { white-space: nowrap; }
+  #log-body .t { color: #5b6b84; }
+  #log-body .to { color: var(--amber); }      /* 客户端 → 服务器 */
+  #log-body .from { color: var(--green); }    /* 服务器 → 客户端 */
+  #log-body .sys { color: #7aa2f7; }          /* 系统/视野事件 */
+
+  .legend {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    padding: 10px 12px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; font-size: 11px; color: var(--muted); line-height: 1.9;
+    pointer-events: none; backdrop-filter: blur(4px);
+  }
+  .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+</style>
+</head>
+<body>
+
+<!-- ===================== 登录界面 ===================== -->
+<div id="login-screen">
+  <div class="login-card">
+    <h1>OpenWorld</h1>
+    <p class="sub">2D 开放世界 RPG · 网页客户端</p>
+    <label for="username">用户名</label>
+    <input id="username" type="text" value="yuzheng" spellcheck="false" autocomplete="off">
+    <button id="btn-login">连接服务器并进入世界</button>
+    <p class="hint">
+      连接真实服务器：浏览器 ↔ WebSocket 桥 ↔ C++ 服务器（protobuf）。<br>
+      连接 → LoginReq → LoginAck（分配 player_id + 出生点）→ 进入世界。<br>
+      移动用 WASD / 方向键，按住 Shift 冲刺；右侧面板显示真实消息时序。
+    </p>
+  </div>
+</div>
+
+<!-- ===================== 游戏界面 ===================== -->
+<div id="game-screen">
+  <canvas id="world"></canvas>
+
+  <div id="hud-info" class="hud">
+    <h3>玩家</h3>
+    <div><span class="dot"></span><span class="v" id="h-name">-</span></div>
+    <div><span class="k">坐标</span> <span class="v" id="h-pos">(0, 0)</span></div>
+    <div><span class="k">速度</span> <span class="v" id="h-vel">0</span></div>
+  </div>
+
+  <div id="hud-stats" class="hud">
+    <h3>服务器</h3>
+    <div><span class="k">tick</span> <span class="v">30 Hz</span></div>
+    <div><span class="k">同屏玩家</span> <span class="v" id="h-visible">0</span></div>
+    <div><span class="k">FPS</span> <span class="v" id="h-fps">0</span></div>
+  </div>
+
+  <div id="hud-help" class="hud">
+    WASD / 方向键 移动 · 按住 Shift 冲刺 ·<span id="h-toggle" style="color:var(--accent)">空格 切换视野圈</span>
+  </div>
+
+  <div class="legend">
+    <div><span class="sw" style="background:#4f8cff"></span>你</div>
+    <div><span class="sw" style="background:#ff6b6b"></span>其他在线玩家</div>
+    <div><span class="sw" style="background:rgba(79,140,255,0.14)"></span>AOI 九宫格视野</div>
+  </div>
+
+  <div id="log-panel">
+    <div id="log-head">
+      <span>消息时序</span>
+      <button id="btn-clear">清空</button>
+    </div>
+    <div id="log-body"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// =====================================================================
+//  真实服务器网页客户端：连 C++ 服务器（通过 Python WebSocket 桥）。
+//  客户端只发意图（方向/速度），位置由服务器 30Hz tick 计算后广播回来。
+//  坐标/速度均使用「服务器单位」，渲染时乘 PX 换算成像素。
+// =====================================================================
+
+const PX = 10;                    // 1 服务器单位 = 10 像素
+const CFG = {
+  WORLD: 2000,                    // 世界边长（服务器单位，与 world.h 一致）
+  CELL: 20,                       // 九宫格格子边长（服务器单位，与 world.h 一致）
+  RUN_SPEED: 12,                  // 步行速度（单位/s）
+  SPRINT_SPEED: 20,               // 冲刺速度（单位/s，= 服务器 MAX_SPEED）
+  TICK_MS: 33,                    // 客户端输入采样（~30Hz）
+  HEARTBEAT_MS: 5000,
+};
+const T = {
+  LOGIN_REQ: 1, LOGIN_ACK: 2, MOVE_REQ: 3, MOVE_BROADCAST: 4,
+  HEARTBEAT: 5, PLAYER_ENTER: 6, PLAYER_LEAVE: 7,
+};
+const PALETTE = ['#ff6b6b', '#51cf66', '#ffd43b', '#b197fc', '#ff922b', '#22b8cf'];
+
+// ---------------- 状态 ----------------
+const self = { id: '', name: '', x: 0, y: 0, vx: 0, vy: 0, seq: 0 };
+const others = new Map();     // player_id -> { id, x, y, vx, vy, color }
+const input = { left: false, right: false, up: false, down: false, shift: false };
+let decorations = [];         // 静态装饰物（树/石头），提供空间参照
+let showAoi = true;
+let ws = null;
+let lastIntent = '';
+let bcTick = 0;               // MoveBroadcast 日志节流计数
+let lastHb = 0;
+
+// ---------------- DOM ----------------
+const $ = (id) => document.getElementById(id);
+const canvas = $('world'), ctx = canvas.getContext('2d');
+const logBody = $('log-body');
+
+// =====================================================================
+//  protobuf 编解码（与 proto/openworld.proto 字段号一致）
+// =====================================================================
+function u8concat(...arrays) {
+  let len = 0; for (const a of arrays) len += a.length;
+  const out = new Uint8Array(len); let off = 0;
+  for (const a of arrays) { out.set(a, off); off += a.length; }
+  return out;
+}
+function u8varint(n) {
+  const out = []; let v = n;
+  while (v > 0x7f) { out.push((v & 0x7f) | 0x80); v = Math.floor(v / 128); }
+  out.push(v);
+  return new Uint8Array(out);
+}
+function encVarint(field, n) { return u8concat(u8varint(field * 8), u8varint(n)); }
+function encBytes(field, bytes) { return u8concat(u8varint(field * 8 + 2), u8varint(bytes.length), bytes); }
+function encString(field, s) { return encBytes(field, new TextEncoder().encode(s)); }
+function encFloat(field, val) {
+  const b = new ArrayBuffer(4);
+  new DataView(b).setFloat32(0, val, true);
+  return u8concat(u8varint(field * 8 + 5), new Uint8Array(b));
+}
+
+function encVec2(x, y) { return u8concat(encFloat(1, x), encFloat(2, y)); }
+function encLoginReq(username) { return u8concat(encString(1, username), encString(2, '')); }
+function encMoveReq(dx, dy, speed, seq) {
+  return u8concat(encBytes(1, encVec2(dx, dy)), encFloat(2, speed), encVarint(3, seq));
+}
+function encHeartbeat() { return encVarint(1, Date.now()); }
+function encEnvelope(type, bodyField, body) {
+  return u8concat(encVarint(1, type), encBytes(bodyField, body));
+}
+
+function readVarint(bytes, pos) {
+  let v = 0, shift = 0;
+  while (true) {
+    const b = bytes[pos++];
+    v += (b & 0x7f) * (2 ** shift);
+    if (!(b & 0x80)) return { v, pos };
+    shift += 7;
+  }
+}
+function decodeMsg(bytes) {
+  const fields = {}; let pos = 0;
+  while (pos < bytes.length) {
+    const { v: tag, pos: p1 } = readVarint(bytes, pos);
+    const f = Math.floor(tag / 8), w = tag & 7;
+    if (w === 0) { const r = readVarint(bytes, p1); fields[f] = r.v; pos = r.pos; }
+    else if (w === 2) { const r = readVarint(bytes, p1); fields[f] = bytes.slice(r.pos, r.pos + r.v); pos = r.pos + r.v; }
+    else if (w === 5) { fields[f] = bytes.slice(p1, p1 + 4); pos = p1 + 4; }
+    else throw new Error('unsupported wire type ' + w);
+  }
+  return fields;
+}
+function f32(bytes) { return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getFloat32(0, true); }
+function str(bytes) { return new TextDecoder().decode(bytes); }
+function decodeVec2(bytes) {
+  const f = decodeMsg(bytes);
+  return { x: f[1] != null ? f32(f[1]) : 0, y: f[2] != null ? f32(f[2]) : 0 };
+}
+
+// =====================================================================
+//  登录 / 连接
+// =====================================================================
+$('btn-login').addEventListener('click', doLogin);
+$('username').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+
+function doLogin() {
+  self.name = $('username').value.trim() || 'yuzheng';
+  logBody.innerHTML = '';
+  log('to', `→ LoginReq{ username:"${self.name}", token:"" }`);
+
+  ws = new WebSocket('ws://' + location.host + '/ws');
+  ws.binaryType = 'arraybuffer';
+  ws.onopen = () => {
+    ws.send(encEnvelope(T.LOGIN_REQ, 2, encLoginReq(self.name)));
+  };
+  ws.onmessage = (e) => onEnvelope(new Uint8Array(e.data));
+  ws.onclose = () => { log('sys', '[连接] 与服务器断开'); };
+  ws.onerror = () => {};
+}
+
+function onEnvelope(bytes) {
+  const f = decodeMsg(bytes);
+  switch (f[1] || 0) {
+    case T.LOGIN_ACK: onLoginAck(f[3]); break;
+    case T.MOVE_BROADCAST: onMoveBroadcast(f[5]); break;
+    case T.HEARTBEAT: onHeartbeat(f[6]); break;
+    case T.PLAYER_ENTER: onPlayerEnter(f[7]); break;
+    case T.PLAYER_LEAVE: onPlayerLeave(f[8]); break;
+  }
+}
+
+function onLoginAck(bytes) {
+  const f = decodeMsg(bytes);
+  const ok = !!f[1];
+  const pid = f[2] ? str(f[2]) : '';
+  const spawn = f[3] ? decodeVec2(f[3]) : { x: 0, y: 0 };
+  if (!ok) { log('from', '← LoginAck{ ok:false }'); return; }
+  self.id = pid;
+  self.x = spawn.x; self.y = spawn.y;
+  log('from', `← LoginAck{ ok:true, player_id:"${pid}", spawn:(${spawn.x},${spawn.y}) }`);
+  $('login-screen').style.display = 'none';
+  $('game-screen').style.display = 'block';
+  $('h-name').textContent = pid;
+  initDecorations();
+  lastHb = performance.now();
+}
+
+function onMoveBroadcast(bytes) {
+  const f = decodeMsg(bytes);
+  const pid = f[1] ? str(f[1]) : '';
+  const pos = f[2] ? decodeVec2(f[2]) : { x: 0, y: 0 };
+  const vel = f[3] ? decodeVec2(f[3]) : { x: 0, y: 0 };
+  if (pid === self.id) {
+    self.x = pos.x; self.y = pos.y; self.vx = vel.x; self.vy = vel.y;
+  } else {
+    let o = others.get(pid);
+    if (!o) { o = { id: pid, x: 0, y: 0, vx: 0, vy: 0, color: colorFor(pid) }; others.set(pid, o); }
+    o.x = pos.x; o.y = pos.y; o.vx = vel.x; o.vy = vel.y;
+  }
+  // 节流日志，避免 30Hz 刷屏
+  if (++bcTick % 8 === 0) {
+    const tag = pid === self.id ? `${pid}（你）` : pid;
+    log('from', `← MoveBroadcast{ player_id:"${tag}", pos:(${pos.x.toFixed(1)},${pos.y.toFixed(1)}), vel:(${vel.x.toFixed(1)},${vel.y.toFixed(1)}) }`);
+  }
+}
+
+function onHeartbeat(bytes) {
+  const f = decodeMsg(bytes);
+  log('from', `← Heartbeat{ server_time:${f[2] || 0} }`);
+}
+
+function onPlayerEnter(bytes) {
+  const f = decodeMsg(bytes);
+  const pid = f[1] ? str(f[1]) : '';
+  const pos = f[2] ? decodeVec2(f[2]) : { x: 0, y: 0 };
+  if (pid === self.id) return;
+  if (!others.has(pid)) {
+    others.set(pid, { id: pid, x: pos.x, y: pos.y, vx: 0, vy: 0, color: colorFor(pid) });
+    log('sys', `[视野] ${pid} 进入你的视野`);
+  }
+}
+
+function onPlayerLeave(bytes) {
+  const f = decodeMsg(bytes);
+  const pid = f[1] ? str(f[1]) : '';
+  if (others.delete(pid)) {
+    log('sys', `[视野] ${pid} 离开你的视野`);
+  }
+}
+
+// ---------------- 装饰物（纯客户端视觉，像素坐标）----------------
+function initDecorations() {
+  decorations = [];
+  const rng = mulberry32(42);
+  const worldPx = CFG.WORLD * PX;
+  for (let i = 0; i < 160; i++) {
+    decorations.push({
+      x: rng() * worldPx, y: rng() * worldPx,
+      r: 8 + rng() * 14, tree: rng() > 0.3,
+    });
+  }
+}
+
+function colorFor(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
+
+// =====================================================================
+//  输入采样循环（~30Hz）：意图变化才发 MoveReq
+// =====================================================================
+function tick() {
+  let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+  const len = Math.hypot(dx, dy);
+  if (len > 0) { dx /= len; dy /= len; }
+  const speed = len > 0 ? (input.shift ? CFG.SPRINT_SPEED : CFG.RUN_SPEED) : 0;
+
+  const key = `${dx.toFixed(2)},${dy.toFixed(2)},${speed}`;
+  if (ws && ws.readyState === 1 && key !== lastIntent) {
+    lastIntent = key;
+    self.seq++;
+    ws.send(encEnvelope(T.MOVE_REQ, 4, encMoveReq(dx, dy, speed, self.seq)));
+    if (speed > 0)
+      log('to', `→ MoveReq{ dir:(${dx.toFixed(2)},${dy.toFixed(2)}), speed:${speed}, seq:${self.seq} }`);
+    else
+      log('to', `→ MoveReq{ 停止, seq:${self.seq} }`);
+  }
+
+  // 心跳
+  const now = performance.now();
+  if (ws && ws.readyState === 1 && now - lastHb >= CFG.HEARTBEAT_MS) {
+    lastHb = now;
+    ws.send(encEnvelope(T.HEARTBEAT, 6, encHeartbeat()));
+    log('to', `→ Heartbeat{ client_time:${Date.now()} }`);
+  }
+
+  // HUD（服务器单位）
+  $('h-pos').textContent = `(${self.x.toFixed(0)}, ${self.y.toFixed(0)})`;
+  $('h-vel').textContent = Math.hypot(self.vx, self.vy).toFixed(1);
+  $('h-visible').textContent = others.size;
+}
+setInterval(tick, CFG.TICK_MS);
+
+// =====================================================================
+//  渲染（60fps，服务器单位 → 像素 ×PX）
+// =====================================================================
+let lastFrame = performance.now(), fps = 0;
+function render() {
+  const W = canvas.width = window.innerWidth;
+  const H = canvas.height = window.innerHeight;
+  const worldPx = CFG.WORLD * PX;
+
+  let camX = self.x * PX - W / 2, camY = self.y * PX - H / 2;
+  camX = clamp(camX, Math.min(0, worldPx - W), Math.max(0, worldPx - W));
+  camY = clamp(camY, Math.min(0, worldPx - H), Math.max(0, worldPx - H));
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0b101c';
+  ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(-camX, -camY);
+
+  // ---- 地图分块网格 ----
+  ctx.strokeStyle = 'rgba(90,110,150,0.12)';
+  ctx.lineWidth = 1;
+  const cellPx = CFG.CELL * PX;
+  for (let gx = 0; gx <= worldPx; gx += cellPx) {
+    ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, worldPx); ctx.stroke();
+  }
+  for (let gy = 0; gy <= worldPx; gy += cellPx) {
+    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(worldPx, gy); ctx.stroke();
+  }
+
+  // ---- AOI 九宫格视野 ----
+  if (showAoi) {
+    const cx = Math.floor(self.x / CFG.CELL), cy = Math.floor(self.y / CFG.CELL);
+    ctx.fillStyle = 'rgba(79,140,255,0.14)';
+    for (let ox = -1; ox <= 1; ox++)
+      for (let oy = -1; oy <= 1; oy++) {
+        const x = (cx + ox) * cellPx, y = (cy + oy) * cellPx;
+        if (x >= -cellPx && y >= -cellPx && x < worldPx && y < worldPx)
+          ctx.fillRect(x, y, cellPx, cellPx);
+      }
+  }
+
+  // ---- 装饰物 ----
+  for (const d of decorations) {
+    if (d.x < camX - 40 || d.x > camX + W + 40 || d.y < camY - 40 || d.y > camY + H + 40) continue;
+    ctx.fillStyle = d.tree ? 'rgba(64,130,90,0.55)' : 'rgba(120,126,140,0.4)';
+    ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // ---- 其他玩家 ----
+  for (const o of others.values()) {
+    drawPlayer(o.x * PX, o.y * PX, 16, o.color, o.id);
+  }
+
+  // ---- 自己 ----
+  drawPlayer(self.x * PX, self.y * PX, 16, '#4f8cff', self.id);
+
+  ctx.restore();
+
+  // ---- FPS ----
+  const now = performance.now();
+  if (now - lastFrame >= 500) {
+    fps = Math.round(1000 / (now - lastFrame));
+    lastFrame = now;
+    $('h-fps').textContent = fps;
+  }
+  requestAnimationFrame(render);
+}
+
+function drawPlayer(x, y, r, color, name) {
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = '#e6e9f0';
+  ctx.font = '12px "Microsoft YaHei", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(name, x, y - r - 6);
+}
+
+// =====================================================================
+//  工具函数
+// =====================================================================
+function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+function mulberry32(a) { return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+function ts() {
+  const d = new Date();
+  return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+}
+function log(cls, text) {
+  const div = document.createElement('div');
+  div.className = 'line ' + cls;
+  div.innerHTML = `<span class="t">[${ts()}]</span> ${text}`;
+  logBody.appendChild(div);
+  while (logBody.children.length > 400) logBody.removeChild(logBody.firstChild);
+  logBody.scrollTop = logBody.scrollHeight;
+}
+
+// =====================================================================
+//  输入
+// =====================================================================
+window.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'arrowleft' || k === 'a') input.left = true;
+  else if (k === 'arrowright' || k === 'd') input.right = true;
+  else if (k === 'arrowup' || k === 'w') input.up = true;
+  else if (k === 'arrowdown' || k === 's') input.down = true;
+  else if (k === 'shift') input.shift = true;
+  else if (k === ' ') { e.preventDefault(); showAoi = !showAoi; }
+  if (['arrowleft','arrowright','arrowup','arrowdown',' '].includes(k)) e.preventDefault();
+});
+window.addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'arrowleft' || k === 'a') input.left = false;
+  else if (k === 'arrowright' || k === 'd') input.right = false;
+  else if (k === 'arrowup' || k === 'w') input.up = false;
+  else if (k === 'arrowdown' || k === 's') input.down = false;
+  else if (k === 'shift') input.shift = false;
+});
+
+$('btn-clear').addEventListener('click', () => { logBody.innerHTML = ''; });
+
+requestAnimationFrame(render);
+</script>
+</body>
+</html>
