@@ -42,7 +42,7 @@ message Envelope {
 
 | 消息 | 方向 | 时机 | 服务器处理 |
 |---|---|---|---|
-| `LoginReq` | 客户端 → 服务器 | 连上后立刻发 | 校验用户名/token，回 `LoginAck`（含出生点） |
+| `LoginReq` | 客户端 → 服务器 | 连上后立刻发 | 校验用户名，回 `LoginAck`：spawn = 存档位置（无存档则默认出生点）；用户名已在线则 `ok:false` 且 `error` 非空 |
 | `LoginAck` | 服务器 → 客户端 | 登录成功后 | —— |
 | `MoveReq` | 客户端 → 服务器 | 按方向键时 | 服务器校验、计算新位置，广播 `MoveBroadcast` 给附近玩家 |
 | `MoveBroadcast` | 服务器 → 附近玩家 | 有人移动后 | ——（客户端只接收渲染） |

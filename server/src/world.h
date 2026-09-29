@@ -8,11 +8,15 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "connection.h"
+#include "persistence.h"
 #include "player.h"
 
 namespace openworld {
@@ -25,7 +29,7 @@ inline constexpr std::int64_t kTickMs = 33;   // tick 间隔（~30Hz）
 
 class World {
 public:
-    explicit World(asio::io_context& io);
+    World(asio::io_context& io, PersistenceService& persistence);
 
     // 消息入口（由 Connection 的 handler 调用）
     void handle(Connection& conn, Envelope& env);
@@ -36,6 +40,9 @@ private:
     void on_login(Connection& conn, const LoginReq& req);
     void on_move(Connection& conn, const MoveReq& req);
     void on_heartbeat(Connection& conn);
+    // 存档加载完成后的回调（在 io_context 线程执行）
+    void complete_login(Connection& conn, std::optional<std::pair<float, float>> saved);
+    void send_login_denied(Connection& conn, const std::string& error);
 
     void start_tick();
     void tick();
@@ -59,10 +66,15 @@ private:
 
     asio::io_context& io_;
     asio::steady_timer tick_;
+    PersistenceService& persistence_;
     std::unordered_map<std::string, std::shared_ptr<Player>> players_;
     std::unordered_map<Connection*, std::shared_ptr<Player>> by_conn_;
+    std::unordered_map<std::string, Player*> by_name_;           // 在线用户名 → 玩家
+    std::unordered_set<std::string> pending_names_;              // 登录中占用的用户名
+    std::unordered_map<Connection*, std::string> pending_login_; // 登录中的连接 → 用户名
     std::unordered_map<std::int64_t, std::vector<Player*>> grid_;
     int next_id_ = 1;
+    std::int64_t next_save_ms_ = 0;                              // 下次定时落盘时间
 };
 
 template <typename F>

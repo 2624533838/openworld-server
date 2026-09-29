@@ -17,8 +17,9 @@ std::int64_t now_ms() {
 
 }  // namespace
 
-World::World(asio::io_context& io)
-    : io_(io), tick_(io) {
+World::World(asio::io_context& io, PersistenceService& persistence)
+    : io_(io), tick_(io), persistence_(persistence) {
+    next_save_ms_ = now_ms() + 10000;
     start_tick();
 }
 
@@ -54,18 +55,44 @@ void World::on_login(Connection& conn, const LoginReq& req) {
         send_login_ack(*existing->second);
         return;
     }
+    // 已在登录流程中：忽略重复帧
+    if (pending_login_.count(&conn)) return;
+
+    const std::string name = req.username();
+    // 用户名（账号身份）已在线或正在登录：拒绝
+    if (by_name_.count(name) || pending_names_.count(name)) {
+        send_login_denied(conn, "用户名已在线");
+        return;
+    }
+
+    // 登记 pending，异步加载存档；回调里再创建玩家（见 complete_login）
+    pending_login_[&conn] = name;
+    pending_names_.insert(name);
+    auto self = conn.shared_from_this();  // 保活：加载期间连接不断，回调安全
+    persistence_.async_load(name, [this, self](std::optional<std::pair<float, float>> saved) {
+        complete_login(*self, saved);
+    });
+}
+
+void World::complete_login(Connection& conn, std::optional<std::pair<float, float>> saved) {
+    auto it = pending_login_.find(&conn);
+    if (it == pending_login_.end()) return;  // 加载期间连接已断开，放弃
+    const std::string name = it->second;
+    pending_login_.erase(it);
+    pending_names_.erase(name);
 
     const int n = next_id_++;
     const std::string id = "player_" + std::to_string(n);
-    // 出生点统一在 (100,100)，同一格子内互相可见，方便验证同屏/进入/离开
-    const float sx = 100.0f;
-    const float sy = 100.0f;
+    // 有存档则恢复最后位置，否则用默认出生点 (100,100)
+    const float sx = saved ? saved->first : 100.0f;
+    const float sy = saved ? saved->second : 100.0f;
 
-    auto player = std::make_shared<Player>(id, req.username(), sx, sy, conn.shared_from_this());
+    auto player = std::make_shared<Player>(id, name, sx, sy, conn.shared_from_this());
     player->set_cell(static_cast<int>(sx / kCellSize), static_cast<int>(sy / kCellSize));
 
     players_[id] = player;
     by_conn_[&conn] = player;
+    by_name_[name] = player.get();
     grid_add(player.get());
 
     send_login_ack(*player);
@@ -75,6 +102,15 @@ void World::on_login(Connection& conn, const LoginReq& req) {
         send_enter_to(*q, *player);  // 已有玩家看到 P 进入
         send_enter_to(*player, *q);  // P 看到已有玩家
     });
+}
+
+void World::send_login_denied(Connection& conn, const std::string& error) {
+    Envelope ack;
+    ack.set_type(Envelope::LOGIN_ACK);
+    auto* a = ack.mutable_login_ack();
+    a->set_ok(false);
+    a->set_error(error);
+    conn.send(ack);
 }
 
 void World::on_move(Connection& conn, const MoveReq& req) {
@@ -105,13 +141,24 @@ void World::on_heartbeat(Connection& conn) {
 }
 
 void World::on_disconnect(Connection* conn) {
+    // 登录尚未完成就断开：清 pending 即可
+    if (auto pit = pending_login_.find(conn); pit != pending_login_.end()) {
+        pending_names_.erase(pit->second);
+        pending_login_.erase(pit);
+        return;
+    }
+
     auto it = by_conn_.find(conn);
     if (it == by_conn_.end()) return;  // 未登录或已清理，幂等
 
     auto player = it->second;  // 持有一份，防止清理期间被析构
     by_conn_.erase(it);
     players_.erase(player->id());
+    by_name_.erase(player->name());
     grid_remove(player.get());
+
+    // 最终位置落盘（离线存档，移除热缓存）
+    persistence_.save_offline(player->name(), player->x(), player->y());
 
     // 通知九宫格内其他玩家：P 离开
     Envelope env;
@@ -156,6 +203,15 @@ void World::tick() {
         b->mutable_vel()->set_y(p->vy());
         broadcast_to_aoi(*p, env);
         p->clear_dirty();
+    }
+
+    // 3) 定时落盘：每 10s 把在线玩家位置写入 MySQL + Redis（fire-and-forget）
+    const std::int64_t now = now_ms();
+    if (now >= next_save_ms_) {
+        next_save_ms_ = now + 10000;
+        for (auto& [id, p] : players_) {
+            persistence_.save_online(p->name(), p->x(), p->y());
+        }
     }
 }
 

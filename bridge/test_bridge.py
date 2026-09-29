@@ -93,7 +93,7 @@ def main():
         print(f'服务器不存在：{SERVER_EXE}，请先构建')
         return 1
 
-    server = subprocess.Popen([SERVER_EXE, str(GAME_PORT)],
+    server = subprocess.Popen([SERVER_EXE, str(GAME_PORT), '--no-db'],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     bridge = subprocess.Popen([sys.executable, os.path.join(ROOT, 'ws_bridge.py'),
                                str(GAME_PORT), str(HTTP_PORT)],

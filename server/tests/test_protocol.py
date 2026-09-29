@@ -250,11 +250,12 @@ def test_login(sock):
 
 
 def test_sticky_packet(sock):
-    # 粘包：一次发两个完整帧
-    sock.sendall(encode_frame(encode_login_req('a')) + encode_frame(encode_login_req('b')))
-    ok1, pid1, _ = decode_login_ack(recv_frame(sock))
-    ok2, pid2, _ = decode_login_ack(recv_frame(sock))
-    assert ok1 and ok2 and pid1 == 'player_1' and pid2 == 'player_1'
+    # 粘包：一次发两个完整帧（两个心跳），应拆成两条心跳回包。
+    # 登录已异步化，用无状态的心跳（同步回包）来测粘包拆分，不依赖登录语义。
+    sock.sendall(encode_frame(encode_heartbeat(1111)) + encode_frame(encode_heartbeat(2222)))
+    hb1 = recv_frame(sock)
+    hb2 = recv_frame(sock)
+    assert envelope_type(hb1) == T_HEARTBEAT and envelope_type(hb2) == T_HEARTBEAT
     print('  [pass] 粘包：一次发两帧，正确拆成两条响应')
 
 
@@ -365,7 +366,8 @@ def main():
         print(f'服务器不存在：{SERVER_EXE}，请先构建')
         return 1
 
-    proc = subprocess.Popen([SERVER_EXE, str(PORT)],
+    # --no-db：协议/玩法测试保持封闭，不依赖 MySQL/Redis
+    proc = subprocess.Popen([SERVER_EXE, str(PORT), '--no-db'],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         time.sleep(0.5)  # 等服务器就绪

@@ -6,8 +6,11 @@
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <string>
 
 #include "connection.h"
+#include "db_config.h"
+#include "persistence.h"
 #include "world.h"
 
 using asio::ip::tcp;
@@ -44,16 +47,34 @@ private:
 
 int main(int argc, char* argv[]) {
     unsigned short port = 9000;
-    if (argc > 1) {
-        port = static_cast<unsigned short>(std::stoi(argv[1]));
+    bool no_db = false;
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "--no-db") {
+            no_db = true;
+        } else {
+            port = static_cast<unsigned short>(std::stoi(arg));
+        }
     }
 
     try {
         asio::io_context io;
-        openworld::World world(io);
+        openworld::DbConfig db_cfg;  // 开发默认值，后续可换环境变量/配置
+        openworld::PersistenceService persistence(io, db_cfg, !no_db);
+        persistence.start();
+
+        openworld::World world(io, persistence);
         Server server(io, port, world);
-        std::cout << "openworld server listening on 127.0.0.1:" << port << std::endl;
+        std::cout << "openworld server listening on 127.0.0.1:" << port
+                  << (no_db ? " (仅内存，无持久化)" : "") << std::endl;
+
+        // Ctrl+C / 关闭信号：停 io_context 让 io.run() 返回，再 drain 持久化队列
+        // （保证退出前把最后一批掉线存档写完，不丢档）
+        asio::signal_set signals(io, SIGINT, SIGTERM);
+        signals.async_wait([&io](std::error_code, int) { io.stop(); });
+
         io.run();
+        persistence.stop();
     } catch (const std::exception& e) {
         std::cerr << "Exception: " << e.what() << "\n";
         return 1;

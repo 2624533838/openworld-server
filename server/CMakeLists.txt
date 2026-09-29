@@ -30,6 +30,8 @@ add_executable(openworld_server
     src/frame.cpp
     src/player.cpp
     src/world.cpp
+    src/redis_client.cpp
+    src/persistence.cpp
 )
 
 # 生成 protobuf C++ 代码（构建时自动生成，proto 是唯一真源）
@@ -53,4 +55,19 @@ target_include_directories(openworld_server PRIVATE "${CMAKE_CURRENT_BINARY_DIR}
 if(WIN32)
     target_link_libraries(openworld_server PRIVATE ws2_32 mswsock)
     target_compile_definitions(openworld_server PRIVATE _WIN32_WINNT=0x0601)
+endif()
+
+# MySQL C API（libmysqlclient）—— 冷存档。装在默认路径则自动启用。
+set(MYSQL_DIR "C:/Program Files/MySQL/MySQL Server 8.0" CACHE PATH "MySQL 安装根目录")
+if(EXISTS "${MYSQL_DIR}/include/mysql.h")
+    target_include_directories(openworld_server PRIVATE "${MYSQL_DIR}/include")
+    target_link_libraries(openworld_server PRIVATE "${MYSQL_DIR}/lib/libmysql.lib")
+    # 运行时依赖：把 libmysql.dll 拷到 exe 旁
+    add_custom_command(TARGET openworld_server POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${MYSQL_DIR}/lib/libmysql.dll"
+            "$<TARGET_FILE_DIR:openworld_server>")
+    message(STATUS "MySQL 持久化：已启用（${MYSQL_DIR}）")
+else()
+    message(WARNING "未找到 ${MYSQL_DIR}/include/mysql.h，持久化编译将失败")
 endif()
