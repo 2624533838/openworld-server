@@ -236,6 +236,7 @@ void World::send_enter_to(Player& viewer, Player& subject) {
     env.set_type(Envelope::PLAYER_ENTER);
     auto* e = env.mutable_player_enter();
     e->set_player_id(subject.id());
+    e->set_name(subject.name());
     e->mutable_pos()->set_x(subject.x());
     e->mutable_pos()->set_y(subject.y());
     viewer.send(env);

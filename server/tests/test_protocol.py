@@ -195,13 +195,15 @@ def decode_move_broadcast(payload):
 def decode_player_enter(payload):
     for num, wt, val in parse_fields(payload):
         if num == 7 and wt == 2:  # player_enter
-            pid, pos = '', (0.0, 0.0)
+            pid, name, pos = '', '', (0.0, 0.0)
             for anum, awt, aval in parse_fields(val):
                 if anum == 1:
                     pid = aval.decode()
                 elif anum == 2:
                     pos = decode_vec2(aval)
-            return pid, pos
+                elif anum == 3:
+                    name = aval.decode()
+            return pid, name, pos
     raise ValueError('no player_enter in envelope')
 
 
@@ -308,8 +310,9 @@ def test_two_players():
     # B 与 A 同屏出生，B 应收到 A 的 PlayerEnter
     enter = recv_until_type(b, T_PLAYER_ENTER)
     assert enter is not None, 'B 应收到 A 的 PlayerEnter'
-    eid, _ = decode_player_enter(enter)
+    eid, ename, _ = decode_player_enter(enter)
     assert eid == aid, f'PlayerEnter id={eid}，期望 {aid}'
+    assert ename == 'alice', f'PlayerEnter name={ename}，期望 alice'
     # A 移动 → B 收到 A 的 MoveBroadcast
     a.sendall(encode_frame(encode_move_req(1.0, 0.0, 5.0, 1)))
     mb = recv_until_type(b, T_MOVE_BROADCAST)
@@ -334,7 +337,7 @@ def test_enter_leave():
     a.sendall(encode_frame(encode_move_req(-1.0, 0.0, MAX_SPEED, 2)))
     enter = recv_until_type(b, T_PLAYER_ENTER, timeout=8)
     assert enter is not None, 'A 走回后 B 应收到 PlayerEnter'
-    eid, _ = decode_player_enter(enter)
+    eid, _, _ = decode_player_enter(enter)
     assert eid == aid
     a.close(); b.close()
     print('  [pass] AOI 进入/离开：走远 → PlayerLeave，走回 → PlayerEnter')

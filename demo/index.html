@@ -131,7 +131,7 @@
 
   <div id="hud-info" class="hud">
     <h3>玩家</h3>
-    <div><span class="dot"></span><span class="v" id="h-name">-</span></div>
+    <div><span class="dot"></span><span class="v" id="h-name">-</span> <span class="k" id="h-id"></span></div>
     <div><span class="k">坐标</span> <span class="v" id="h-pos">(0, 0)</span></div>
     <div><span class="k">速度</span> <span class="v" id="h-vel">0</span></div>
   </div>
@@ -307,7 +307,8 @@ function onLoginAck(bytes) {
   log('from', `← LoginAck{ ok:true, player_id:"${pid}", spawn:(${spawn.x},${spawn.y}) }`);
   $('login-screen').style.display = 'none';
   $('game-screen').style.display = 'block';
-  $('h-name').textContent = pid;
+  $('h-name').textContent = self.name;
+  $('h-id').textContent = '(' + pid + ')';
   initDecorations();
   lastHb = performance.now();
 }
@@ -321,7 +322,7 @@ function onMoveBroadcast(bytes) {
     self.x = pos.x; self.y = pos.y; self.vx = vel.x; self.vy = vel.y;
   } else {
     let o = others.get(pid);
-    if (!o) { o = { id: pid, x: 0, y: 0, vx: 0, vy: 0, color: colorFor(pid) }; others.set(pid, o); }
+    if (!o) { o = { id: pid, name: pid, x: 0, y: 0, vx: 0, vy: 0, color: colorFor(pid) }; others.set(pid, o); }
     o.x = pos.x; o.y = pos.y; o.vx = vel.x; o.vy = vel.y;
   }
   // 节流日志，避免 30Hz 刷屏
@@ -340,10 +341,11 @@ function onPlayerEnter(bytes) {
   const f = decodeMsg(bytes);
   const pid = f[1] ? str(f[1]) : '';
   const pos = f[2] ? decodeVec2(f[2]) : { x: 0, y: 0 };
+  const name = f[3] ? str(f[3]) : pid;
   if (pid === self.id) return;
   if (!others.has(pid)) {
-    others.set(pid, { id: pid, x: pos.x, y: pos.y, vx: 0, vy: 0, color: colorFor(pid) });
-    log('sys', `[视野] ${pid} 进入你的视野`);
+    others.set(pid, { id: pid, name, x: pos.x, y: pos.y, vx: 0, vy: 0, color: colorFor(pid) });
+    log('sys', `[视野] ${name} 进入你的视野`);
   }
 }
 
@@ -461,11 +463,11 @@ function render() {
 
   // ---- 其他玩家 ----
   for (const o of others.values()) {
-    drawPlayer(o.x * PX, o.y * PX, 16, o.color, o.id);
+    drawPlayer(o.x * PX, o.y * PX, 16, o.color, o.name || o.id);
   }
 
   // ---- 自己 ----
-  drawPlayer(self.x * PX, self.y * PX, 16, '#4f8cff', self.id);
+  drawPlayer(self.x * PX, self.y * PX, 16, '#4f8cff', self.name || self.id);
 
   ctx.restore();
 

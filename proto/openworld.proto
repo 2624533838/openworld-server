@@ -46,6 +46,7 @@ message Heartbeat {
 message PlayerEnter {
     string player_id = 1;
     Vec2 pos = 2;
+    string name = 3;
 }
 
 // 玩家离开视野（服务器 → 附近玩家）

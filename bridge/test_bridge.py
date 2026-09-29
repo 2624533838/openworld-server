@@ -117,9 +117,10 @@ def main():
         assert bid == 'player_2', bid
         enter = ws_recv_until_type(b, tp.T_PLAYER_ENTER)
         assert enter is not None, 'B 未收到 A 的 PlayerEnter'
-        eid, _ = tp.decode_player_enter(enter)
+        eid, ename, _ = tp.decode_player_enter(enter)
         assert eid == aid, f'PlayerEnter id={eid}，期望 {aid}'
-        print(f'  [pass] 桥接双玩家：B={bid} 看到 A 进入视野')
+        assert ename == 'alice', f'PlayerEnter name={ename}，期望 alice'
+        print(f'  [pass] 桥接双玩家：B={bid} 看到 {ename}({eid}) 进入视野')
 
         ws_send(a, tp.encode_move_req(1.0, 0.0, 5.0, 1))
         mb = ws_recv_until_type(b, tp.T_MOVE_BROADCAST)
