@@ -35,7 +35,7 @@ openworld-server/
 - [ ] 网关 + 逻辑服
 - [ ] 断线重连 + 压测
 
-文档：[docs/prd.md](docs/prd.md)（产品设计） · [docs/tech-design.md](docs/tech-design.md)（技术方案） · [docs/spec.md](docs/spec.md)（技术规格） · [docs/protocol.md](docs/protocol.md)（协议）。
+文档：[docs/prd.md](docs/prd.md)（产品设计） · [docs/backend-design.md](docs/backend-design.md)（后端架构） · [docs/tech-design.md](docs/tech-design.md)（移动/AOI 设计） · [docs/spec.md](docs/spec.md)（技术规格） · [docs/protocol.md](docs/protocol.md)（协议）。
 
 ## 构建
 
