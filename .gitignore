@@ -25,6 +25,10 @@ Makefile
 # ---- FetchContent 缓存 ----
 _deps/
 
+# ---- protobuf 构建依赖（源码 + 编译产物，不进 git）----
+server/third_party/protobuf-src/
+server/third_party/protobuf/
+
 # ---- IDE ----
 .vscode/
 .idea/
