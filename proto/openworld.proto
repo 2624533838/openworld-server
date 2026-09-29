@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package openworld;
+
+// 二维向量（坐标/速度）
+message Vec2 {
+    float x = 1;
+    float y = 2;
+}
+
+// 登录请求
+message LoginReq {
+    string username = 1;
+    string token = 2;
+}
+
+// 登录响应
+message LoginAck {
+    bool ok = 1;
+    string player_id = 2;
+    Vec2 spawn = 3;        // 出生点
+    string error = 4;      // 失败原因
+}
+
+// 移动意图（客户端 → 服务器）：只发方向/速度，不发坐标
+message MoveReq {
+    Vec2 dir = 1;          // 归一化方向
+    float speed = 2;
+    int64 seq = 3;         // 客户端序号，用于回包确认
+}
+
+// 移动广播（服务器 → 附近玩家）：服务器算好的新位置
+message MoveBroadcast {
+    string player_id = 1;
+    Vec2 pos = 2;
+    Vec2 vel = 3;
+}
+
+// 心跳
+message Heartbeat {
+    int64 client_time = 1;
+    int64 server_time = 2;
+}
+
+// 统一信封：所有消息都包在这里
+message Envelope {
+    enum Type {
+        NONE = 0;
+        LOGIN_REQ = 1;
+        LOGIN_ACK = 2;
+        MOVE_REQ = 3;
+        MOVE_BROADCAST = 4;
+        HEARTBEAT = 5;
+    }
+
+    Type type = 1;
+
+    oneof body {
+        LoginReq login_req = 2;
+        LoginAck login_ack = 3;
+        MoveReq move_req = 4;
+        MoveBroadcast move_broadcast = 5;
+        Heartbeat heartbeat = 6;
+    }
+}
