@@ -32,11 +32,11 @@ openworld-server/
 - [x] 分块地图 + 服务器权威移动 + 九宫格 AOI 广播 + 多玩家同屏（**MVP**）
 - [x] 网页客户端 + WebSocket 桥（浏览器 ↔ 桥 ↔ 服务器，真机可玩）
 - [x] 数据持久化（Redis 热数据 + MySQL 冷存档，掉线不丢档）
+- [x] 心跳超时 + 断线重连完整处理（服务器踢僵尸连接 + 客户端自动重连恢复位置）
+- [x] GoogleTest 单测（帧/九宫格/推进数学）+ 压测（N 并发假客户端）
 - [ ] 网关 + 逻辑服拆分（可选，先单进程）
-- [ ] 心跳超时 + 断线重连完整处理
-- [ ] GoogleTest 单测 + 压测
 
-文档：[docs/prd.md](docs/prd.md)（产品设计） · [docs/spec.md](docs/spec.md)（技术规格） · [docs/backend-design.md](docs/backend-design.md)（后端架构） · [docs/tech-design.md](docs/tech-design.md)（移动/AOI 设计） · [docs/protocol.md](docs/protocol.md)（协议） · [docs/persistence.md](docs/persistence.md)（持久化）。
+文档：[docs/prd.md](docs/prd.md)（产品设计） · [docs/spec.md](docs/spec.md)（技术规格） · [docs/backend-design.md](docs/backend-design.md)（后端架构） · [docs/tech-design.md](docs/tech-design.md)（移动/AOI 设计） · [docs/protocol.md](docs/protocol.md)（协议） · [docs/persistence.md](docs/persistence.md)（持久化） · []()（）。
 
 ## 构建
 
@@ -87,7 +87,32 @@ python bridge/ws_bridge.py 9000 8080
 ## 测试
 
 ```bash
-python server/tests/test_protocol.py      # 协议层 + MVP 玩法（登录/限速/多玩家/九宫格 AOI/断线）
-python server/tests/test_persistence.py   # 持久化（需 MySQL+Redis：掉线不丢档/重名拒绝）
-python bridge/test_bridge.py              # 桥接端到端（登录/双玩家同屏/移动）
+# GoogleTest 单测（纯逻辑：帧编解码/九宫格 AOI/移动推进数学）
+ctest --test-dir server/build -C Release --output-on-failure
+# 或直接运行 server/build/Release/openworld_tests.exe
+
+python server/tests/test_protocol.py           # 协议层 + MVP 玩法（登录/限速/多玩家/九宫格 AOI/断线）
+python server/tests/test_heartbeat_timeout.py  # 心跳超时踢线（服务器主动踢无活动连接）
+python server/tests/test_persistence.py        # 持久化（需 MySQL+Redis：掉线不丢档/重名拒绝）
+python bridge/test_bridge.py                   # 桥接端到端（登录/双玩家同屏/移动）
 ```
+
+> Reactor 异步本身不做单测（难），由集成测试覆盖；单测只覆盖抽出来的纯逻辑（`grid.h`/`frame.h`/`player.h`）。
+
+## 压测
+
+先起服务器（`--no-db` 测纯逻辑负载，排除数据库干扰），再跑假客户端：
+
+```bash
+./server/build/Release/openworld_server.exe 9000 --no-db
+python server/tests/bench_client.py --conns 50 --duration 15 --port 9000
+```
+
+所有假客户端默认出生在 (100,100) 同格，构成 O(N²) 广播最坏情况。实测（本机 Release）：
+
+| 并发连接 | 登录成功 | 登录延迟(avg/p99) | 广播吞吐 | 每客户端 |
+|---|---|---|---|---|
+| 10 | 10/10 | 3.9ms / 5.3ms | ~2.6k msg/s | 259 msg/s |
+| 50 | 50/50 | 3.9ms / 7.1ms | ~60k msg/s | 1210 msg/s |
+
+> `bench_client.py` 是 Java 压测客户端就绪前的 Python 替身。
