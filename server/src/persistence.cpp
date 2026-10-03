@@ -1,8 +1,10 @@
 #include "persistence.h"
 
+#ifdef OPENWORLD_HAS_MYSQL
 // winsock2.h 必须先于 mysql.h（否则 mysql.h 引入的 winsock.h 会与 winsock2.h 冲突）
 #include <winsock2.h>
 #include <mysql.h>
+#endif
 
 #include <charconv>
 #include <cstring>
@@ -42,6 +44,7 @@ bool decode_xy(const std::string& s, float& x, float& y) {
 
 }  // namespace
 
+#ifdef OPENWORLD_HAS_MYSQL
 // ---- MysqlDb：RAII 包 MYSQL* + 预处理语句（防用户名 SQL 注入）----
 
 class MysqlDb {
@@ -135,6 +138,20 @@ private:
     MYSQL_STMT* stmt_load_ = nullptr;
     MYSQL_STMT* stmt_save_ = nullptr;
 };
+
+#else  // OPENWORLD_HAS_MYSQL
+
+// 无 MySQL 编译：桩实现，所有操作返回失败/空，持久化降级为仅内存。
+class MysqlDb {
+public:
+    bool connect(const DbConfig&) { return false; }
+    bool ensure_schema() { return false; }
+    bool prepare() { return false; }
+    std::optional<std::pair<float, float>> load(const std::string&) { return std::nullopt; }
+    bool save(const std::string&, float, float) { return false; }
+};
+
+#endif  // OPENWORLD_HAS_MYSQL
 
 // ---- PersistenceService ----
 

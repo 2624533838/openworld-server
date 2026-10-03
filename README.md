@@ -2,14 +2,14 @@
 
 2D 开放世界 RPG 服务器—— 一个人能完成的开放世界RPG服务端微缩版。
 
-**目标**：把开放世界RPG服务端的四个核心概念——**分线、AOI 视野、状态同步、数据持久化**——在可完成的尺度下完整跑通一遍，作为游戏服务端的作品。。
+**目标**：把开放世界RPG服务端的四个核心概念——**分线、AOI 视野、状态同步、数据持久化**——在可完成的尺度下完整跑通一遍。
 
 ## 技术栈
 
 | 端 | 技术 |
 |---|---|
 | 服务器 | C++20 · Asio · 自实现 Reactor · protobuf · spdlog · GoogleTest · Redis/MySQL |
-| 客户端 | Java（，硬约束：原生 TCP + protobuf）+ 网页演示客户端（demo/） |
+| 客户端 | Java（原生 TCP + protobuf）+ 网页演示客户端（demo/） |
 | 存储 | Redis（在线热数据）+ MySQL（离线存档），分层落盘 |
 
 ## 目录结构
@@ -19,7 +19,7 @@ openworld-server/
 ├── server/        C++ 服务器
 ├── bridge/        网页 ↔ 服务器 的 WebSocket 桥（纯 Python 标准库）
 ├── demo/          网页客户端（浏览器直连真实服务器）
-├── client/        Java 客户端
+├── client/        Java 客户端（原生 TCP + protobuf）
 ├── proto/         protobuf 协议定义（前后端公共合同）
 └── docs/          项目规格 + 协议文档
 ```
@@ -36,7 +36,7 @@ openworld-server/
 - [x] GoogleTest 单测（帧/九宫格/推进数学）+ 压测（N 并发假客户端）
 - [ ] 网关 + 逻辑服拆分（可选，先单进程）
 
-文档：[docs/prd.md](docs/prd.md)（产品设计） · [docs/spec.md](docs/spec.md)（技术规格） · [docs/backend-design.md](docs/backend-design.md)（后端架构） · [docs/tech-design.md](docs/tech-design.md)（移动/AOI 设计） · [docs/protocol.md](docs/protocol.md)（协议） · [docs/persistence.md](docs/persistence.md)（持久化） · []()（）。
+文档：[docs/prd.md](docs/prd.md)（产品设计） · [docs/spec.md](docs/spec.md)（技术规格） · [docs/backend-design.md](docs/backend-design.md)（后端架构） · [docs/tech-design.md](docs/tech-design.md)（移动/AOI 设计） · [docs/protocol.md](docs/protocol.md)（协议） · [docs/persistence.md](docs/persistence.md)（持久化）。
 
 ## 构建
 

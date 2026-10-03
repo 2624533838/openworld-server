@@ -1,0 +1,81 @@
+name: CI
+
+# 每次推 main / 开 PR 都跑：构建 + 单测 + 协议/心跳集成测试。
+# 说明：
+#  - third_party 里 asio 已随仓库提交；googletest / protobuf 被 .gitignore，需在 CI 现场拉取。
+#  - GitHub Actions 的 runner 在美国，可直连 github.com（本机被墙才用 gitclone.com 镜像）。
+#  - runner 没装 MySQL，服务器会自动编译为「无 MySQL」版本（持久化降级为仅内存），
+#    正好顺带验证了无库环境也能构建。因此 test_persistence.py（需 MySQL+Redis）不在 CI 跑。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同一分支的新提交取消仍在跑的旧任务，省配额
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROTOBUF_VERSION: v21.12
+  GTEST_VERSION: v1.14.0
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash  # 统一 bash，避免 PowerShell 引号/编码坑
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- 依赖 vendor ----
+
+      # protobuf 从源码编译最耗时，用 actions/cache 缓存产物，命中则跳过
+      - name: Cache protobuf
+        id: cache-protobuf
+        uses: actions/cache@v4
+        with:
+          path: server/third_party/protobuf
+          key: protobuf-${{ env.PROTOBUF_VERSION }}-msvc-static
+
+      - name: Vendor googletest
+        run: |
+          git clone --depth 1 --branch "$GTEST_VERSION" \
+            https://github.com/google/googletest.git \
+            server/third_party/googletest
+
+      - name: Build protobuf (未命中缓存时)
+        if: steps.cache-protobuf.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch "$PROTOBUF_VERSION" \
+            https://github.com/protocolbuffers/protobuf.git \
+            server/third_party/protobuf-src
+          cmake -S server/third_party/protobuf-src -B server/third_party/protobuf-src/build -A x64 \
+            -Dprotobuf_BUILD_PROTOC_BINARIES=ON \
+            -Dprotobuf_BUILD_SHARED_LIBS=OFF \
+            -Dprotobuf_BUILD_TESTS=OFF \
+            -Dprotobuf_WITH_ZLIB=OFF \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/server/third_party/protobuf"
+          cmake --build server/third_party/protobuf-src/build --config Release --parallel
+          cmake --install server/third_party/protobuf-src/build --config Release
+
+      # ---- 构建 ----
+      - name: Configure
+        run: cmake -S server -B server/build -A x64
+
+      - name: Build
+        run: cmake --build server/build --config Release --parallel
+
+      # ---- 测试 ----
+      - name: Unit tests (GoogleTest)
+        run: ctest --test-dir server/build -C Release --output-on-failure
+
+      - name: Protocol integration test (9 场景，--no-db)
+        run: python server/tests/test_protocol.py
+
+      - name: Heartbeat timeout test (短超时踢线)
+        run: python server/tests/test_heartbeat_timeout.py

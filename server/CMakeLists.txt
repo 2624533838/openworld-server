@@ -61,11 +61,13 @@ if(WIN32)
     target_compile_definitions(openworld_server PRIVATE _WIN32_WINNT=0x0601)
 endif()
 
-# MySQL C API（libmysqlclient）—— 冷存档。装在默认路径则自动启用。
+# MySQL C API（libmysqlclient）—— 冷存档。装在默认路径则自动启用；
+# 找不到则编译为无 MySQL 版本（持久化降级为仅内存），保证 CI/无库环境也能构建。
 set(MYSQL_DIR "C:/Program Files/MySQL/MySQL Server 8.0" CACHE PATH "MySQL 安装根目录")
 if(EXISTS "${MYSQL_DIR}/include/mysql.h")
     target_include_directories(openworld_server PRIVATE "${MYSQL_DIR}/include")
     target_link_libraries(openworld_server PRIVATE "${MYSQL_DIR}/lib/libmysql.lib")
+    target_compile_definitions(openworld_server PRIVATE OPENWORLD_HAS_MYSQL)
     # 运行时依赖：把 libmysql.dll 拷到 exe 旁
     add_custom_command(TARGET openworld_server POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -73,7 +75,7 @@ if(EXISTS "${MYSQL_DIR}/include/mysql.h")
             "$<TARGET_FILE_DIR:openworld_server>")
     message(STATUS "MySQL 持久化：已启用（${MYSQL_DIR}）")
 else()
-    message(WARNING "未找到 ${MYSQL_DIR}/include/mysql.h，持久化编译将失败")
+    message(WARNING "未找到 ${MYSQL_DIR}/include/mysql.h，编译为无 MySQL 版本（持久化降级为仅内存）")
 endif()
 
 # ---- 单元测试（GoogleTest，vendor 源码见 third_party/googletest）----

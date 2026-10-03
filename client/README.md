@@ -5,7 +5,7 @@
 2. 必须用 **protobuf** 编解码（线上格式，见 `../proto/openworld.proto`）
 
 ## 自由决定
-语言、框架、界面全部自行决定。建议选一个后端也能看懂的语言，方便联调 debug：Java / Python / C++。
+语言、框架、界面全部自行决定。建议选后端 C++ 也能看懂的通用语言，方便联调 debug：Java / Python / C++。
 
 ## 联调入口
 - 协议：`../docs/protocol.md`
