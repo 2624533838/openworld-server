@@ -30,6 +30,9 @@ public:
 
     // 发送一个 Envelope（自动加长度前缀）
     void send(const Envelope& env);
+    // 广播优化：发送一份已序列化好的帧（长度前缀已加），多个连接共享同一份字节，
+    // 避免对同一消息重复序列化 + 拷贝。
+    void send(std::shared_ptr<const std::string> frame);
 
     // 主动关闭连接（如心跳超时踢线）。关闭会取消未完成的异步读写，
     // 其完成回调以 operation_aborted 触发 on_close_，由上层做清理。
@@ -44,7 +47,7 @@ private:
     CloseHandler on_close_;
     FrameDecoder decoder_;
     char data_[4096];
-    std::deque<std::string> write_queue_;  // 写队列，支持连续多次 send
+    std::deque<std::shared_ptr<const std::string>> write_queue_;  // 写队列，支持连续多次 send；元素共享帧字节
 };
 
 }  // namespace openworld

@@ -19,8 +19,12 @@ void Connection::send(const Envelope& env) {
         std::cerr << "Connection::send: SerializeToString failed\n";
         return;
     }
+    send(std::make_shared<const std::string>(encode_frame(payload)));
+}
+
+void Connection::send(std::shared_ptr<const std::string> frame) {
     const bool write_in_progress = !write_queue_.empty();
-    write_queue_.push_back(encode_frame(payload));
+    write_queue_.push_back(std::move(frame));
     if (!write_in_progress) {
         do_write();
     }
@@ -60,7 +64,8 @@ void Connection::do_read() {
 
 void Connection::do_write() {
     auto self(shared_from_this());
-    asio::async_write(socket_, asio::buffer(write_queue_.front()),
+    const auto& frame = write_queue_.front();  // 保持 shared_ptr 存活到写完成
+    asio::async_write(socket_, asio::buffer(frame->data(), frame->size()),
         [this, self](std::error_code ec, std::size_t) {
             if (ec) {
                 std::cerr << "connection closed (write): " << ec.message() << "\n";

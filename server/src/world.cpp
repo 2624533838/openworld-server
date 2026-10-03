@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <iostream>
 
 namespace openworld {
 
@@ -167,13 +168,11 @@ void World::on_disconnect(Connection* conn) {
     // 最终位置落盘（离线存档，移除热缓存）
     persistence_.save_offline(player->name(), player->x(), player->y());
 
-    // 通知九宫格内其他玩家：P 离开
+    // 通知九宫格内其他玩家：P 离开（此时已从 grid 移除，不会发给自身）
     Envelope env;
     env.set_type(Envelope::PLAYER_LEAVE);
     env.mutable_player_leave()->set_player_id(player->id());
-    for_each_in_aoi(*player, [&](Player* q) {
-        q->send(env);
-    });
+    broadcast_to_aoi(*player, env);
 }
 
 void World::tick() {
@@ -231,8 +230,16 @@ void World::tick() {
 }
 
 void World::broadcast_to_aoi(const Player& p, Envelope& env) {
+    // 广播优化：同一消息只序列化一次，九宫格内 N 个连接共享同一帧字节
+    //（避免对每个连接重复 SerializeToString + 拷贝）。
+    std::string payload;
+    if (!env.SerializeToString(&payload)) {
+        std::cerr << "World::broadcast_to_aoi: SerializeToString failed\n";
+        return;
+    }
+    auto frame = std::make_shared<const std::string>(encode_frame(payload));
     grid_.for_each_in_aoi(p.cell_x(), p.cell_y(), [&](Player* q) {
-        q->send(env);
+        q->send(frame);
     });
 }
 

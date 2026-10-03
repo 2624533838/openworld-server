@@ -46,6 +46,7 @@ public:
 
     // 便捷发送
     void send(Envelope& env) { conn_->send(env); }
+    void send(std::shared_ptr<const std::string> frame) { conn_->send(std::move(frame)); }
 
 private:
     std::string id_;
